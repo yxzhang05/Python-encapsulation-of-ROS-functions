@@ -282,24 +282,61 @@ hsv_upper = (20, 255, 255)
 bot.start_visual_follow_custom(hsv_lower, hsv_upper)
 ```
 
-### 回调函数支持
+### 检测模式（不控制底盘）
 
-视觉功能支持回调函数获取实时信息：
+视觉功能支持仅检测不控制模式：
 
 ```python
-def on_target_detected(info):
-    print(f"检测到目标: {info}")
+# 仅检测，不自动控制底盘
+bot.start_visual_follow("red", control_enabled=False)
 
-bot.start_visual_follow("red", control_enabled=False, callback=on_target_detected)
+# 手动获取目标信息并自行处理
+info = bot.get_visual_target_info()
+if info['detected']:
+    # 自定义控制逻辑
+    pass
 ```
+
+注意: 回调函数功能计划在未来版本实现。当前版本请使用 `get_visual_target_info()` 和 `get_line_info()` 函数获取实时信息。
 
 ## 待完善功能
 
-以下功能需要根据实际硬件的串口协议进行适配：
+以下数据获取函数返回占位符值，需要根据实际ROS2消息格式进行解析实现：
 
-- 部分传感器数据的详细解析
+- `_get_odom()` - 需要解析 nav_msgs/msg/Odometry 消息
+- `get_wheel_speeds()` - 需要根据实际轮速话题和消息类型解析
+- `get_imu_data()` - 需要解析 sensor_msgs/msg/Imu 消息
+- `get_arm_pose_xy()` - 需要解析机械臂位姿消息
+- `get_joint_states()` - 需要解析 sensor_msgs/msg/JointState 消息
+- `get_visual_target_info()` - 需要解析视觉目标话题
+- `get_line_info()` - 需要解析巡线信息话题
+- `get_navigation_status()` - 需要查询导航action状态
+- `get_current_map()` - 需要解析 nav_msgs/msg/OccupancyGrid 消息
+
+其他需要完善的功能：
+
+- 视觉跟随和巡线的回调函数机制
+- 某些功能需要根据实际硬件的串口协议进行适配
 - 特定硬件的自定义功能
-- 某些功能的回调机制优化
+
+## 高级功能说明
+
+### 非阻塞操作
+
+大部分函数都是非阻塞的，允许并行操作：
+
+- `start_mapping()` - 非阻塞启动，可以同时控制机器人移动
+- `start_visual_follow()` - 使用 `control_enabled=False` 可以仅检测不控制
+- `start_line_tracking()` - 使用 `control_enabled=False` 可以仅检测不控制
+
+### 超时保护
+
+关键的运动控制函数都添加了超时保护：
+
+- `move_distance()` - 默认30秒超时
+- `rotate_angle()` - 默认30秒超时
+
+可以通过 `timeout` 参数自定义超时时间。
 
 ## 技术支持
 

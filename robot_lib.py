@@ -2,15 +2,17 @@
 """
 ROS2 Python封装库
 提供简化的Python接口来控制ROS2机器人，无需用户学习ROS命令
+
+注意: 某些获取数据的函数（如 _get_odom, get_wheel_speeds, get_imu_data 等）
+      返回占位符数据，需要根据实际的ROS2消息格式进行解析实现。
+      这些函数已标记为需要完善的部分。
 """
 
 import subprocess
 import time
 import signal
-import threading
 import math
 import os
-import json
 
 
 class Robot:
@@ -188,7 +190,7 @@ class Robot:
         except Exception as e:
             print(f"[Error] 设置速度失败: {e}")
 
-    def move_distance(self, distance, speed, lateral_distance=0.0, lateral_speed=0.0):
+    def move_distance(self, distance, speed, lateral_distance=0.0, lateral_speed=0.0, timeout=30.0):
         """
         闭环控制移动指定距离
         阿克曼/差速: 仅使用distance和speed参数
@@ -198,6 +200,7 @@ class Robot:
         :param speed: float, 前进速度(m/s), 必须为正
         :param lateral_distance: float, 横向距离(m), 仅麦轮有效
         :param lateral_speed: float, 横向速度(m/s), 仅麦轮有效
+        :param timeout: float, 超时时间(秒), 默认30秒
         :return: bool, 成功返回True
         """
         if speed <= 0:
@@ -221,8 +224,9 @@ class Robot:
             v_x = speed if distance >= 0 else -speed
             v_y = lateral_speed if lateral_distance >= 0 else -lateral_speed
             
-            # 持续运动直到到达目标
-            while True:
+            # 持续运动直到到达目标或超时
+            start_time = time.time()
+            while (time.time() - start_time) < timeout:
                 current_odom = self._get_odom()
                 if current_odom is None:
                     break
@@ -242,6 +246,11 @@ class Robot:
             
             # 停止
             self.set_velocity(0.0, 0.0, 0.0)
+            
+            if (time.time() - start_time) >= timeout:
+                print("[Warning] 移动超时")
+                return False
+            
             print("[Motion] 移动完成")
             return True
             
@@ -304,11 +313,12 @@ class Robot:
             self.set_velocity(0.0, 0.0, 0.0)
             return False
 
-    def rotate_angle(self, angle, speed):
+    def rotate_angle(self, angle, speed, timeout=30.0):
         """
         原地或行进间旋转指定角度
         :param angle: float, 旋转角度(度), 正值左转
         :param speed: float, 旋转角速度(rad/s)
+        :param timeout: float, 超时时间(秒), 默认30秒
         :return: bool, 成功返回True
         """
         if speed <= 0:
@@ -331,7 +341,8 @@ class Robot:
             
             w_z = speed if angle >= 0 else -speed
             
-            while True:
+            start_time = time.time()
+            while (time.time() - start_time) < timeout:
                 current_odom = self._get_odom()
                 if current_odom is None:
                     break
@@ -349,6 +360,11 @@ class Robot:
                 time.sleep(0.1)
             
             self.set_velocity(0.0, 0.0, 0.0)
+            
+            if (time.time() - start_time) >= timeout:
+                print("[Warning] 旋转超时")
+                return False
+            
             print("[Motion] 旋转完成")
             return True
             
@@ -361,12 +377,14 @@ class Robot:
         """
         获取四轮实时速度
         :return: dict, {'fl': front_left, 'fr': front_right, 'rl': rear_left, 'rr': rear_right}
+        
+        注意: 此函数需要根据实际的ROS2消息格式进行解析
+              当前返回占位符数据，实际使用时需要完善
         """
         try:
             cmd = ["ros2", "topic", "echo", "/wheel_speeds", "--once"]
             output = subprocess.check_output(cmd, timeout=2.0).decode("utf-8")
-            # 解析输出 (具体格式需要根据实际消息类型调整)
-            # 这里提供一个模板
+            # TODO: 解析轮速消息
             speeds = {'fl': 0.0, 'fr': 0.0, 'rl': 0.0, 'rr': 0.0}
             return speeds
         except Exception as e:
@@ -377,11 +395,14 @@ class Robot:
         """
         获取陀螺仪6轴信息
         :return: dict, {'accel': [x,y,z], 'gyro': [x,y,z]}
+        
+        注意: 此函数需要根据实际的ROS2 Imu消息格式进行解析
+              当前返回占位符数据，实际使用时需要完善
         """
         try:
             cmd = ["ros2", "topic", "echo", "/imu", "--once"]
             output = subprocess.check_output(cmd, timeout=2.0).decode("utf-8")
-            # 解析IMU数据
+            # TODO: 解析IMU消息
             imu_data = {
                 'accel': [0.0, 0.0, 0.0],
                 'gyro': [0.0, 0.0, 0.0]
@@ -442,11 +463,15 @@ class Robot:
         """
         内部函数: 获取里程计信息
         :return: dict, {'x': x, 'y': y, 'yaw': yaw}
+        
+        注意: 此函数需要根据实际的ROS2 Odometry消息格式进行解析
+              当前返回占位符数据，实际使用时需要完善
         """
         try:
             cmd = ["ros2", "topic", "echo", "/odom", "--once"]
             output = subprocess.check_output(cmd, timeout=2.0).decode("utf-8")
-            # 简化的解析 (实际需要解析Odometry消息)
+            # TODO: 解析Odometry消息
+            # 需要从output中提取position.x, position.y和orientation (quaternion转euler)
             odom = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
             return odom
         except Exception as e:
@@ -629,12 +654,27 @@ class Robot:
                 return False
             
             # 启动rviz可视化
-            subprocess.Popen(
-                ["rviz2", "-d", "$(ros2 pkg prefix wheeltec_lidar)/share/wheeltec_lidar/rviz/lidar.rviz"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                shell=True
-            )
+            rviz_config = "$(ros2 pkg prefix wheeltec_lidar)/share/wheeltec_lidar/rviz/lidar.rviz"
+            # 使用Python扩展路径而不是shell
+            try:
+                pkg_prefix = subprocess.check_output(
+                    ["ros2", "pkg", "prefix", "wheeltec_lidar"],
+                    timeout=2.0
+                ).decode("utf-8").strip()
+                rviz_config_path = f"{pkg_prefix}/share/wheeltec_lidar/rviz/lidar.rviz"
+                
+                subprocess.Popen(
+                    ["rviz2", "-d", rviz_config_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception:
+                # 如果找不到配置文件，只启动默认rviz
+                subprocess.Popen(
+                    ["rviz2"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
             
             print("[Sensor] 雷达启动成功")
             return True
@@ -706,13 +746,14 @@ class Robot:
             self.camera_process = None
             print("[Sensor] 相机已关闭")
 
-    def start_visual_follow(self, color, control_enabled=True, callback=None):
+    def start_visual_follow(self, color, control_enabled=True):
         """
         启动视觉跟随
         :param color: str, 目标颜色 'red', 'blue', 'green', 'yellow'
         :param control_enabled: bool, 是否自动控制底盘
-        :param callback: function, 回调函数，接收目标信息
         :return: bool, 成功返回True
+        
+        注意: callback功能待实现，当前版本使用 get_visual_target_info() 获取目标信息
         """
         print(f"[App] 启动视觉跟随: {color}")
         
@@ -783,13 +824,14 @@ class Robot:
         except Exception as e:
             return {'detected': False, 'x': 0, 'y': 0, 'area': 0}
 
-    def start_line_tracking(self, color, control_enabled=True, callback=None):
+    def start_line_tracking(self, color, control_enabled=True):
         """
         启动视觉巡线
         :param color: str, 线条颜色 'black', 'red', 'yellow'
         :param control_enabled: bool, 是否自动控制底盘
-        :param callback: function, 回调函数，接收线条信息
         :return: bool, 成功返回True
+        
+        注意: callback功能待实现，当前版本使用 get_line_info() 获取线条信息
         """
         print(f"[App] 启动巡线: {color}")
         
@@ -1111,8 +1153,6 @@ class Robot:
         取消当前导航任务
         """
         print("[Nav] 取消导航...")
-        
-        cmd = ["ros2", "action", "send_goal", "/navigate_to_pose", "nav2_msgs/action/NavigateToPose", "--feedback"]
         
         try:
             # 发送取消命令
