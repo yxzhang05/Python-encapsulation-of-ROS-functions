@@ -57,11 +57,14 @@ def auto_mapping_demo(bot):
     print("="*50)
     
     # 1. 启动雷达
+    # 雷达提供环境扫描数据，是SLAM建图的核心传感器
     print("\n1. 启动雷达")
     bot.launch_lidar()
     time.sleep(2)
     
     # 2. 启动建图（非阻塞）
+    # start_mapping是非阻塞的，建图在后台运行
+    # 同时可以控制机器人移动或读取传感器数据
     print("\n2. 启动cartographer建图算法")
     success = bot.start_mapping("cartographer")
     if not success:
@@ -71,29 +74,35 @@ def auto_mapping_demo(bot):
     print("\n建图已启动，开始自动探索...")
     
     # 3. 自动探索策略：简单的正方形路径
+    # 让机器人走一个正方形，覆盖周围环境
     print("\n3. 执行自动探索路径")
     
     try:
-        # 正方形路径，每边2米
-        side_length = 2.0
-        speed = 0.2
+        # 正方形路径参数
+        side_length = 2.0  # 每边长度2米
+        speed = 0.2        # 移动速度0.2m/s
         
+        # 走四条边形成正方形
         for i in range(4):
             print(f"\n第{i+1}边: 前进{side_length}米")
             
-            # 前进过程中监控雷达
+            # 前进过程中实时监控雷达，避免碰撞
             start_time = time.time()
+            # 计算预期的行驶时间
             while (time.time() - start_time) < (side_length / speed):
-                # 检查前方障碍
-                distance = bot.get_lidar_distance(0)
+                # 检查正前方的障碍物距离
+                distance = bot.get_lidar_distance(0)  # 0度=正前方
+                # 如果检测到30cm内有障碍物，提前停止
                 if distance > 0 and distance < 0.3:
                     print("检测到障碍物，提前停止")
                     bot.emergency_stop()
                     break
                 
+                # 持续发送前进命令
                 bot.set_velocity(speed, 0.0, 0.0)
-                time.sleep(0.1)
+                time.sleep(0.1)  # 100ms控制周期
             
+            # 停止并准备转向
             bot.emergency_stop()
             time.sleep(1)
             
