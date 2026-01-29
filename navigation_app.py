@@ -17,29 +17,35 @@ def simple_navigation_demo(bot, map_name):
     print("="*50)
     
     # 1. 启动导航系统
+    # 导航系统需要加载预先建好的地图文件
     print(f"\n1. 加载地图并启动导航: {map_name}")
     success = bot.start_navigation(map_name)
     if not success:
         return False
     
+    # 等待导航系统完全初始化
+    # 包括加载地图、定位机器人位置、初始化路径规划器等
     print("导航系统已启动，等待初始化...")
     time.sleep(5)
     
     # 2. 设置目标点
+    # 目标点使用地图坐标系，原点通常在建图起始位置
     print("\n2. 发送导航目标")
-    target_x = 2.0
-    target_y = 1.5
-    target_theta = 90  # 朝向北方
+    target_x = 2.0         # 目标X坐标(米)
+    target_y = 1.5         # 目标Y坐标(米)
+    target_theta = 90      # 目标朝向(度)，90度=朝北
     
     print(f"目标: x={target_x}m, y={target_y}m, theta={target_theta}°")
     bot.move_to_goal(target_x, target_y, target_theta)
     
     # 3. 监控导航状态
+    # 导航是异步的，需要轮询状态来判断是否到达
     print("\n3. 监控导航进度")
-    timeout = 60  # 60秒超时
+    timeout = 60  # 设置60秒超时，防止无限等待
     start_time = time.time()
     
     while (time.time() - start_time) < timeout:
+        # 查询导航状态和当前位置
         status = bot.get_navigation_status()
         pose = bot.get_pose()
         
@@ -67,6 +73,7 @@ def simple_navigation_demo(bot, map_name):
 def multi_point_navigation_demo(bot, map_name):
     """
     多点导航示例：按顺序导航到多个目标点
+    实现自动巡航功能，适合巡检、配送等场景
     """
     print("\n" + "="*50)
     print("多点导航示例")
@@ -81,24 +88,28 @@ def multi_point_navigation_demo(bot, map_name):
     time.sleep(5)
     
     # 2. 定义巡航路径
+    # 每个路点包含(x, y, theta)三个坐标
+    # 这里定义一个矩形路径
     waypoints = [
-        (1.0, 1.0, 0),      # 点1
-        (2.0, 1.0, 90),     # 点2
-        (2.0, 2.0, 180),    # 点3
-        (1.0, 2.0, 270),    # 点4
+        (1.0, 1.0, 0),      # 点1: 起点，朝东
+        (2.0, 1.0, 90),     # 点2: 右侧，朝北
+        (2.0, 2.0, 180),    # 点3: 右上，朝西
+        (1.0, 2.0, 270),    # 点4: 左上，朝南
         (1.0, 1.0, 0)       # 回到起点
     ]
     
     print(f"\n2. 开始巡航，共{len(waypoints)}个点")
     
+    # 3. 依次导航到每个路点
     for i, (x, y, theta) in enumerate(waypoints):
         print(f"\n--- 导航到点{i+1}/{len(waypoints)} ---")
         print(f"目标: x={x}m, y={y}m, theta={theta}°")
         
+        # 发送导航目标
         bot.move_to_goal(x, y, theta)
         
-        # 等待到达
-        timeout = 30
+        # 等待到达当前路点
+        timeout = 30  # 每个点最多等待30秒
         start_time = time.time()
         reached = False
         
@@ -106,10 +117,12 @@ def multi_point_navigation_demo(bot, map_name):
             status = bot.get_navigation_status()
             
             if status == "reached":
+                # 成功到达目标点
                 print(f"点{i+1}到达！")
                 reached = True
                 break
             elif status == "failed":
+                # 导航失败（如路径被阻挡），跳过此点
                 print(f"点{i+1}导航失败，跳过")
                 break
             

@@ -79,57 +79,60 @@ def main():
             print(f"当前末端位置: x={pose_xy[0]:.1f}mm, y={pose_xy[1]:.1f}mm")
 
         # 8. 夹爪控制
+        # 夹爪值从0到10，0表示完全闭合，10表示完全张开
         print("\n--- 夹爪控制 ---")
         print("夹爪完全张开")
-        bot.set_gripper(10)
+        bot.set_gripper(10)  # 最大张开，准备抓取
         time.sleep(2)
 
         print("夹爪半开")
-        bot.set_gripper(5)
+        bot.set_gripper(5)  # 中等开度
         time.sleep(2)
 
         print("夹爪闭合")
-        bot.set_gripper(0)
+        bot.set_gripper(0)  # 完全闭合，夹紧物体
         time.sleep(2)
 
         # 9. PWM控制示例
+        # PWM可以控制额外的电机、LED灯等外设
         print("\n--- PWM控制示例 ---")
         print("设置引脚3的PWM为50%")
-        bot.set_pwm(3, 0.5)
+        bot.set_pwm(3, 0.5)  # 占空比0.5 = 50%功率
         time.sleep(1)
 
         print("设置引脚3的PWM为100%")
-        bot.set_pwm(3, 1.0)
+        bot.set_pwm(3, 1.0)  # 占空比1.0 = 100%功率
         time.sleep(1)
 
         print("关闭引脚3的PWM")
-        bot.set_pwm(3, 0.0)
+        bot.set_pwm(3, 0.0)  # 占空比0 = 关闭
 
-        # 10. 复合动作示例：抓取物体
+        # 10. 复合动作示例：完整的抓取-搬运-放置流程
         print("\n--- 复合动作示例：模拟抓取 ---")
         
         print("1. 机械臂移动到目标上方")
-        bot.set_arm_position(200, 200)
+        # 使用逆运动学控制，直接指定末端位置坐标
+        bot.set_arm_position(200, 200)  # x=200mm, y=200mm (上方位置)
         time.sleep(2)
         
         print("2. 张开夹爪")
-        bot.set_gripper(10)
+        bot.set_gripper(10)  # 完全张开，准备接近物体
         time.sleep(1)
         
         print("3. 下降到抓取位置")
-        bot.set_arm_position(200, 150)
+        bot.set_arm_position(200, 150)  # 下降到y=150mm (物体高度)
         time.sleep(2)
         
         print("4. 闭合夹爪")
-        bot.set_gripper(0)
+        bot.set_gripper(0)  # 夹紧物体
         time.sleep(1)
         
         print("5. 提升物体")
-        bot.set_arm_position(200, 200)
+        bot.set_arm_position(200, 200)  # 提升回上方位置
         time.sleep(2)
         
         print("6. 移动到放置位置")
-        bot.set_arm_position(150, 200)
+        bot.set_arm_position(150, 200)  # 横向移动到新位置x=150mm
         time.sleep(2)
         
         print("7. 放下物体")
