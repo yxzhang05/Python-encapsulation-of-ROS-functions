@@ -45,14 +45,19 @@ class Robot:
         :param robot_type: str, 车型枚举 "akm", "diff", "mec"
         :return: bool, 成功返回True
         """
+        # 1. 检查参数合法性，确保传入的车型在支持列表中
         if robot_type not in self.ROBOT_TYPE_MAP:
             print(f"[Error] 未知的车型: {robot_type}. 支持: {list(self.ROBOT_TYPE_MAP.keys())}")
             return False
 
+        # 2. 保存当前车型，并获取实际的ROS参数名称
         self.robot_type = robot_type
         real_type_name = self.ROBOT_TYPE_MAP[robot_type]
         print(f"[System] 正在启动 {real_type_name} ({robot_type}) 底盘驱动...")
 
+        # 3. 构建ROS2 launch命令
+        # 使用turn_on_wheeltec_robot包启动底盘驱动
+        # robot_type参数用于指定具体的车型配置
         cmd = [
             "ros2", "launch", 
             "turn_on_wheeltec_robot", 
@@ -61,15 +66,22 @@ class Robot:
         ]
 
         try:
+            # 4. 启动后台进程
+            # stdout=DEVNULL: 屏蔽标准输出，保持界面清爽
+            # stderr=PIPE: 保留错误输出以便调试
             self.driver_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE
             )
             
+            # 5. 等待硬件初始化
+            # 底盘需要时间连接串口、初始化IMU、雷达等硬件
             print("[System] 正在初始化硬件，请等待 5 秒...")
             time.sleep(5)
             
+            # 6. 检查进程是否因报错而退出
+            # poll()返回None表示进程仍在运行，返回退出码表示已结束
             if self.driver_process.poll() is not None:
                 print("[Error] 驱动启动失败！请检查错误日志。")
                 return False
@@ -88,10 +100,11 @@ class Robot:
         """
         print("[System] 正在关闭机器人系统...")
         
-        # 停止所有运动
+        # 1. 首先停止所有运动，确保机器人处于静止状态
         self.emergency_stop()
         
-        # 关闭所有进程
+        # 2. 准备关闭所有后台进程
+        # 进程列表包含进程句柄和名称，方便日志输出
         processes = [
             (self.driver_process, "底盘驱动"),
             (self.keyboard_process, "键盘控制"),
@@ -104,19 +117,23 @@ class Robot:
             (self.lidar_follow_process, "雷达跟随")
         ]
         
+        # 3. 逐个关闭进程
         for process, name in processes:
             if process:
                 try:
+                    # 先发送SIGINT信号（Ctrl+C），让进程优雅退出
                     process.send_signal(signal.SIGINT)
+                    # 等待最多5秒让进程自行结束
                     process.wait(timeout=5)
                     print(f"[System] {name}已关闭。")
                 except subprocess.TimeoutExpired:
+                    # 如果5秒后进程还没结束，强制kill
                     process.kill()
                     print(f"[System] {name}强制关闭。")
                 except Exception as e:
                     print(f"[Warning] 关闭{name}时出错: {e}")
         
-        # 重置进程句柄
+        # 4. 重置所有进程句柄为None，释放资源
         self.driver_process = None
         self.keyboard_process = None
         self.lidar_process = None
@@ -134,15 +151,24 @@ class Robot:
         获取当前底盘电池电压
         :return: float, 电压值(V)，失败返回0.0
         """
+        # 指定电压话题名称，Wheeltec底盘通常使用/PowerVoltage话题
         topic_name = "/PowerVoltage" 
         
         try:
+            # 构建ros2 topic echo命令
+            # --once: 只获取一次消息就退出
+            # --field data: 只提取消息中的data字段，简化输出
             cmd = ["ros2", "topic", "echo", topic_name, "--once", "--field", "data"]
+            
+            # 执行命令，设置2秒超时防止话题无数据时卡死
             output = subprocess.check_output(cmd, timeout=2.0).decode("utf-8")
+            
+            # 清理输出字符串（去除换行符等），转换为浮点数
             voltage = float(output.strip())
             return voltage
             
         except subprocess.TimeoutExpired:
+            # 超时通常意味着底盘没有上电或话题名称错误
             print("[Warning] 获取电压超时 (底盘没上电或话题错误)")
             return 0.0
         except Exception as e:
@@ -179,6 +205,11 @@ class Robot:
         :param v_y: float, 横向速度 (m/s), 仅麦轮有效
         :param w_z: float, 角速度 (rad/s), 左转为正
         """
+        # 构建ROS2消息发布命令
+        # 使用geometry_msgs/msg/Twist消息类型，这是ROS中标准的速度控制消息
+        # linear.x: 前后方向线速度
+        # linear.y: 左右方向线速度（仅全向轮/麦轮有效）
+        # angular.z: 绕Z轴旋转的角速度
         cmd = [
             "ros2", "topic", "pub", "--once", "/cmd_vel",
             "geometry_msgs/msg/Twist",
@@ -186,6 +217,7 @@ class Robot:
         ]
         
         try:
+            # 执行命令，屏蔽输出以保持界面清爽
             subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1.0)
         except Exception as e:
             print(f"[Error] 设置速度失败: {e}")
@@ -203,6 +235,7 @@ class Robot:
         :param timeout: float, 超时时间(秒), 默认30秒
         :return: bool, 成功返回True
         """
+        # 1. 参数检查：速度必须为正数
         if speed <= 0:
             print("[Error] 速度必须为正数")
             return False
@@ -210,43 +243,50 @@ class Robot:
         print(f"[Motion] 移动距离: 前进={distance}m, 横向={lateral_distance}m")
         
         try:
-            # 获取初始位置
+            # 2. 获取初始位置
+            # 通过里程计读取当前位置，作为移动的起点
             initial_odom = self._get_odom()
             if initial_odom is None:
                 print("[Error] 无法获取里程计信息")
                 return False
             
+            # 3. 计算目标位置
+            # 在当前位置基础上加上要移动的距离
             initial_x, initial_y = initial_odom['x'], initial_odom['y']
             target_x = initial_x + distance
             target_y = initial_y + lateral_distance
             
-            # 计算运动方向
+            # 4. 确定运动方向
+            # 根据距离的正负确定速度方向：正距离用正速度，负距离用负速度
             v_x = speed if distance >= 0 else -speed
             v_y = lateral_speed if lateral_distance >= 0 else -lateral_speed
             
-            # 持续运动直到到达目标或超时
+            # 5. 闭环控制：持续运动直到到达目标或超时
             start_time = time.time()
             while (time.time() - start_time) < timeout:
+                # 获取当前位置
                 current_odom = self._get_odom()
                 if current_odom is None:
                     break
                 
                 current_x, current_y = current_odom['x'], current_odom['y']
                 
-                # 计算剩余距离
+                # 计算与目标位置的剩余距离
                 remaining_x = abs(target_x - current_x)
                 remaining_y = abs(target_y - current_y)
                 
-                # 判断是否到达
+                # 判断是否到达目标（允许2cm的误差）
                 if remaining_x < 0.02 and remaining_y < 0.02:  # 2cm误差
                     break
                 
+                # 持续发送速度命令
                 self.set_velocity(v_x, v_y, 0.0)
-                time.sleep(0.1)
+                time.sleep(0.1)  # 100ms的控制周期
             
-            # 停止
+            # 6. 停止运动
             self.set_velocity(0.0, 0.0, 0.0)
             
+            # 7. 检查是否超时
             if (time.time() - start_time) >= timeout:
                 print("[Warning] 移动超时")
                 return False
@@ -255,6 +295,7 @@ class Robot:
             return True
             
         except Exception as e:
+            # 发生异常时确保停止运动
             print(f"[Error] 移动过程出错: {e}")
             self.set_velocity(0.0, 0.0, 0.0)
             return False
@@ -267,43 +308,56 @@ class Robot:
         :param radius: float, 转弯半径(m), None表示直线
         :return: bool, 成功返回True
         """
+        # 1. 麦轮车型不适用此函数，建议使用move_distance
         if self.robot_type == "mec":
             print("[Warning] 麦轮车型请使用 move_distance 函数")
             return self.move_distance(distance, speed)
         
+        # 2. 如果半径为None，执行直线运动
         if radius is None:
-            # 直线运动
             return self.move_distance(distance, speed)
         
-        # 弧线运动: w = v / r
+        # 3. 计算角速度
+        # 弧线运动公式: w = v / r
+        # 其中 w 是角速度，v 是线速度，r 是转弯半径
         w_z = speed / radius if radius != 0 else 0.0
         
         print(f"[Motion] 弧线移动: 距离={distance}m, 半径={radius}m")
         
         try:
+            # 4. 获取初始位置
             initial_odom = self._get_odom()
             if initial_odom is None:
                 return False
             
+            # 5. 累计已移动的距离
+            # 通过连续采样位置，计算实际行驶距离
             distance_traveled = 0.0
             last_x, last_y = initial_odom['x'], initial_odom['y']
             
+            # 6. 确定线速度方向
             v_x = speed if distance >= 0 else -speed
             
+            # 7. 持续运动直到达到目标距离
             while distance_traveled < abs(distance):
+                # 发送速度命令：包含线速度和角速度
                 self.set_velocity(v_x, 0.0, w_z)
                 time.sleep(0.1)
                 
+                # 获取当前位置
                 current_odom = self._get_odom()
                 if current_odom is None:
                     break
                 
+                # 计算自上次采样以来移动的距离（直线距离）
                 current_x, current_y = current_odom['x'], current_odom['y']
                 distance_traveled += math.sqrt(
                     (current_x - last_x)**2 + (current_y - last_y)**2
                 )
+                # 更新上次位置
                 last_x, last_y = current_x, current_y
             
+            # 8. 停止运动
             self.set_velocity(0.0, 0.0, 0.0)
             print("[Motion] 弧线移动完成")
             return True
@@ -321,46 +375,60 @@ class Robot:
         :param timeout: float, 超时时间(秒), 默认30秒
         :return: bool, 成功返回True
         """
+        # 1. 参数检查：角速度必须为正数
         if speed <= 0:
             print("[Error] 角速度必须为正数")
             return False
         
+        # 2. 将角度转换为弧度
         angle_rad = math.radians(angle)
         print(f"[Motion] 旋转角度: {angle}度 ({angle_rad:.2f}弧度)")
         
         try:
+            # 3. 获取初始朝向
             initial_odom = self._get_odom()
             if initial_odom is None:
                 return False
             
+            # 4. 计算目标朝向
             initial_yaw = initial_odom['yaw']
             target_yaw = initial_yaw + angle_rad
             
-            # 归一化到 [-pi, pi]
+            # 5. 归一化角度到 [-pi, pi] 范围
+            # 使用atan2处理角度归一化，避免角度累加导致的数值问题
             target_yaw = math.atan2(math.sin(target_yaw), math.cos(target_yaw))
             
+            # 6. 确定旋转方向
+            # 正角度左转（逆时针），负角度右转（顺时针）
             w_z = speed if angle >= 0 else -speed
             
+            # 7. 闭环控制：持续旋转直到到达目标角度或超时
             start_time = time.time()
             while (time.time() - start_time) < timeout:
+                # 获取当前朝向
                 current_odom = self._get_odom()
                 if current_odom is None:
                     break
                 
                 current_yaw = current_odom['yaw']
                 
-                # 计算剩余角度
+                # 计算剩余需要旋转的角度
+                # 处理角度跨越-pi到pi的边界情况
                 remaining_angle = target_yaw - current_yaw
                 remaining_angle = math.atan2(math.sin(remaining_angle), math.cos(remaining_angle))
                 
-                if abs(remaining_angle) < 0.02:  # 约1度误差
+                # 判断是否到达目标（允许约1度的误差）
+                if abs(remaining_angle) < 0.02:  # 0.02弧度 ≈ 1.15度
                     break
                 
+                # 持续发送旋转命令
                 self.set_velocity(0.0, 0.0, w_z)
-                time.sleep(0.1)
+                time.sleep(0.1)  # 100ms控制周期
             
+            # 8. 停止旋转
             self.set_velocity(0.0, 0.0, 0.0)
             
+            # 9. 检查是否超时
             if (time.time() - start_time) >= timeout:
                 print("[Warning] 旋转超时")
                 return False
@@ -369,6 +437,7 @@ class Robot:
             return True
             
         except Exception as e:
+            # 发生异常时确保停止运动
             print(f"[Error] 旋转过程出错: {e}")
             self.set_velocity(0.0, 0.0, 0.0)
             return False
@@ -639,37 +708,44 @@ class Robot:
         """
         print("[Sensor] 启动雷达...")
         
+        # 1. 构建启动雷达驱动的命令
         cmd = ["ros2", "launch", "wheeltec_lidar", "wheeltec_lidar.launch.py"]
         
         try:
+            # 2. 启动雷达驱动进程
             self.lidar_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE
             )
+            # 等待3秒让雷达初始化
             time.sleep(3)
             
+            # 3. 检查进程是否正常运行
             if self.lidar_process.poll() is not None:
                 print("[Error] 雷达启动失败")
                 return False
             
-            # 启动rviz可视化
-            rviz_config = "$(ros2 pkg prefix wheeltec_lidar)/share/wheeltec_lidar/rviz/lidar.rviz"
-            # 使用Python扩展路径而不是shell
+            # 4. 启动rviz可视化工具
+            # 尝试找到雷达包的配置文件路径
             try:
+                # 获取wheeltec_lidar包的安装路径
                 pkg_prefix = subprocess.check_output(
                     ["ros2", "pkg", "prefix", "wheeltec_lidar"],
                     timeout=2.0
                 ).decode("utf-8").strip()
+                
+                # 构建完整的rviz配置文件路径
                 rviz_config_path = f"{pkg_prefix}/share/wheeltec_lidar/rviz/lidar.rviz"
                 
+                # 启动rviz并加载配置文件
                 subprocess.Popen(
                     ["rviz2", "-d", rviz_config_path],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
             except Exception:
-                # 如果找不到配置文件，只启动默认rviz
+                # 如果找不到配置文件或包不存在，启动默认rviz
                 subprocess.Popen(
                     ["rviz2"],
                     stdout=subprocess.DEVNULL,
@@ -690,9 +766,12 @@ class Robot:
         if self.lidar_process:
             print("[Sensor] 关闭雷达...")
             try:
+                # 发送SIGINT信号优雅关闭
                 self.lidar_process.send_signal(signal.SIGINT)
+                # 等待最多5秒
                 self.lidar_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
+                # 超时则强制kill
                 self.lidar_process.kill()
             self.lidar_process = None
             print("[Sensor] 雷达已关闭")
@@ -757,6 +836,9 @@ class Robot:
         """
         print(f"[App] 启动视觉跟随: {color}")
         
+        # 构建视觉跟随的launch命令
+        # color: 指定要跟随的颜色（需要预定义HSV阈值）
+        # control: true表示自动控制底盘，false仅检测不控制
         cmd = [
             "ros2", "launch", "wheeltec_vision", "visual_follow.launch.py",
             f"color:={color}",
@@ -764,13 +846,16 @@ class Robot:
         ]
         
         try:
+            # 启动视觉跟随进程
             self.visual_follow_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE
             )
+            # 等待2秒让视觉节点初始化
             time.sleep(2)
             
+            # 检查进程是否成功启动
             if self.visual_follow_process.poll() is not None:
                 print("[Error] 视觉跟随启动失败")
                 return False
@@ -788,9 +873,16 @@ class Robot:
         :param hsv_lower: tuple, HSV下界 (h, s, v)
         :param hsv_upper: tuple, HSV上界 (h, s, v)
         :param control_enabled: bool, 是否自动控制底盘
+        
+        HSV颜色空间说明:
+        - H (色调): 0-180, 表示颜色类型（红0-10/170-180, 绿35-85, 蓝100-130）
+        - S (饱和度): 0-255, 表示颜色纯度（越高越鲜艳）
+        - V (亮度): 0-255, 表示颜色明暗（越高越亮）
         """
         print(f"[App] 启动自定义颜色视觉跟随")
         
+        # 构建自定义HSV参数的命令
+        # hsv_lower和hsv_upper定义要检测的颜色范围
         cmd = [
             "ros2", "launch", "wheeltec_vision", "visual_follow.launch.py",
             f"hsv_lower:=[{hsv_lower[0]},{hsv_lower[1]},{hsv_lower[2]}]",
@@ -1008,23 +1100,32 @@ class Robot:
         启动SLAM建图
         :param method: str, 建图算法 "gmapping" 或 "cartographer"
         :return: bool, 成功返回True
+        
+        说明:
+        - gmapping: 基于粒子滤波的2D SLAM算法，计算量小，适合实时建图
+        - cartographer: Google开发的SLAM算法，精度高但计算量大
         """
         print(f"[SLAM] 启动建图: {method}")
         
+        # 1. 检查建图算法是否支持
         if method not in ["gmapping", "cartographer"]:
             print("[Error] 不支持的建图方法，支持: gmapping, cartographer")
             return False
         
+        # 2. 构建启动建图的命令
         cmd = [
             "ros2", "launch", "wheeltec_slam", f"{method}.launch.py"
         ]
         
         try:
+            # 3. 启动建图进程（非阻塞）
+            # 建图节点会在后台运行，可以同时控制机器人移动
             self.mapping_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE
             )
+            # 等待3秒让SLAM节点初始化
             time.sleep(3)
             
             if self.mapping_process.poll() is not None:
@@ -1043,23 +1144,34 @@ class Robot:
         保存当前构建的地图
         :param map_name: str, 地图文件名(不含扩展名)
         :return: bool, 成功返回True
+        
+        说明:
+        - 地图保存为两个文件: .yaml (元数据) 和 .pgm (图像)
+        - 默认保存在 ~/maps/ 目录下
         """
         print(f"[SLAM] 保存地图: {map_name}")
         
-        # 确保地图保存目录存在
+        # 1. 确保地图保存目录存在
+        # 使用expanduser展开~为用户主目录
         map_dir = os.path.expanduser("~/maps")
         os.makedirs(map_dir, exist_ok=True)
         
+        # 2. 构建完整的地图路径
         map_path = os.path.join(map_dir, map_name)
         
+        # 3. 构建地图保存命令
+        # nav2_map_server的map_saver_cli工具用于保存地图
+        # -f 参数指定输出文件名（不含扩展名）
         cmd = [
             "ros2", "run", "nav2_map_server", "map_saver_cli",
             "-f", map_path
         ]
         
         try:
+            # 4. 执行保存命令，设置10秒超时
             result = subprocess.run(cmd, timeout=10.0, capture_output=True)
             if result.returncode == 0:
+                # 成功保存，会生成.yaml和.pgm两个文件
                 print(f"[SLAM] 地图已保存: {map_path}.yaml 和 {map_path}.pgm")
                 return True
             else:
@@ -1073,6 +1185,11 @@ class Robot:
         """
         启动键盘控制
         阻塞式，直到用户按Ctrl+C
+        
+        说明:
+        - 使用键盘方向键或WASD控制机器人移动
+        - 常用于建图时手动控制机器人探索环境
+        - 函数会阻塞当前线程，直到用户按Ctrl+C退出
         """
         print("\n" + "="*40)
         print("[App] 进入键盘控制模式...")
