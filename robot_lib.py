@@ -468,13 +468,34 @@ class Robot:
         """
         内部函数: 获取里程计信息
         :return: dict, {'x': x, 'y': y, 'yaw': yaw}
-        注意: 需要根据实际Odometry消息格式解析
         """
         try:
-            cmd = ["ros2", "topic", "echo", "/odom", "--once"]
-            output = subprocess.check_output(cmd, timeout=2.0).decode("utf-8")
-            # TODO: 解析Odometry消息 (position.x, position.y, orientation转euler)
-            odom = {'x': 0.0, 'y': 0.0, 'yaw': 0.0}
+            # 获取位置信息 (x, y)
+            cmd_x = ["ros2", "topic", "echo", "/odom", "--once", "--field", "pose.pose.position.x"]
+            x = float(subprocess.check_output(cmd_x, timeout=2.0).decode("utf-8").strip())
+            
+            cmd_y = ["ros2", "topic", "echo", "/odom", "--once", "--field", "pose.pose.position.y"]
+            y = float(subprocess.check_output(cmd_y, timeout=2.0).decode("utf-8").strip())
+            
+            # 获取姿态信息 (四元数)
+            cmd_qx = ["ros2", "topic", "echo", "/odom", "--once", "--field", "pose.pose.orientation.x"]
+            qx = float(subprocess.check_output(cmd_qx, timeout=2.0).decode("utf-8").strip())
+            
+            cmd_qy = ["ros2", "topic", "echo", "/odom", "--once", "--field", "pose.pose.orientation.y"]
+            qy = float(subprocess.check_output(cmd_qy, timeout=2.0).decode("utf-8").strip())
+            
+            cmd_qz = ["ros2", "topic", "echo", "/odom", "--once", "--field", "pose.pose.orientation.z"]
+            qz = float(subprocess.check_output(cmd_qz, timeout=2.0).decode("utf-8").strip())
+            
+            cmd_qw = ["ros2", "topic", "echo", "/odom", "--once", "--field", "pose.pose.orientation.w"]
+            qw = float(subprocess.check_output(cmd_qw, timeout=2.0).decode("utf-8").strip())
+            
+            # 四元数转欧拉角 (只需要yaw)
+            siny_cosp = 2 * (qw * qz + qx * qy)
+            cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+            yaw = math.atan2(siny_cosp, cosy_cosp)
+            
+            odom = {'x': x, 'y': y, 'yaw': yaw}
             return odom
         except Exception as e:
             return None

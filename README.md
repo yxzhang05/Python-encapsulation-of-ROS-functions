@@ -303,7 +303,7 @@ if info['detected']:
 
 以下数据获取函数返回占位符值，需要根据实际ROS2消息格式进行解析实现：
 
-- `_get_odom()` - 需要解析 nav_msgs/msg/Odometry 消息
+- ~~`_get_odom()` - 需要解析 nav_msgs/msg/Odometry 消息~~ ✅ 已实现
 - `get_wheel_speeds()` - 需要根据实际轮速话题和消息类型解析
 - `get_imu_data()` - 需要解析 sensor_msgs/msg/Imu 消息
 - `get_arm_pose_xy()` - 需要解析机械臂位姿消息
