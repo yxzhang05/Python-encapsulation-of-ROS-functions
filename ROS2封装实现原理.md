@@ -196,7 +196,7 @@ class MoveDistanceNode(Node):
 
 **Python封装实现**：
 ```python
-def move_distance(self, distance, speed=0.3):
+def move_distance(self, distance, speed):
     start_pose = self._get_odom()
     target_distance = abs(distance)
     v_x = speed if distance > 0 else -speed
