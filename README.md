@@ -13,8 +13,8 @@
 - ✅ **零 ROS2 知识要求**：无需了解话题、服务、action 等 ROS2 概念
 - ✅ **完整功能覆盖**：系统管理、运动控制、机械臂、传感器、建图导航
 - ✅ **详细中文注释**：每个函数都有完整的说明和使用示例
-- ✅ **模块化设计**：按功能独立划分，可单独使用或组合使用
-- ✅ **丰富示例**：提供多个完整的应用示例
+- ✅ **累积式设计**：每个文件包含前面所有功能，逐步增加新功能
+- ✅ **简洁注释风格**：采用原示例文件的注释风格，简单实用
 - ✅ **支持多车型**：阿克曼、差速、麦轮三种车型
 
 ### 🤖 支持的机器人功能
@@ -29,7 +29,22 @@
 
 ---
 
-## 🚀 快速开始
+## 📦 库文件说明
+
+本项目采用**累积式增量设计**，每个文件包含前面所有功能，并新增一类功能：
+
+| 文件名 | 大小 | 包含功能 | 适用场景 |
+|--------|------|----------|----------|
+| `robot_lib_system.py` | 4.6KB | 系统管理 | 只需基本的初始化和关闭 |
+| `robot_lib_system_chassis.py` | 15KB | 系统管理 + 底盘运动 | 需要控制机器人移动 |
+| `robot_lib_system_chassis_arm.py` | 22KB | + 机械臂控制 | 带机械臂的机器人 |
+| `robot_lib_system_chassis_arm_sensors.py` | 29KB | + 感知功能 | 需要使用传感器和视觉应用 |
+| `robot_lib_full.py` | 35KB | + 建图导航（完整版） | 需要所有功能 |
+
+**使用建议**：
+- 🎯 根据需求选择对应的库文件
+- 🎯 功能越多，文件越大，但都是累积的
+- 🎯 推荐使用 `robot_lib_full.py` 以获得完整功能
 
 ### 环境要求
 
@@ -49,17 +64,16 @@ cd Python-encapsulation-of-ROS-functions
 source /opt/ros/humble/setup.bash
 source ~/wheeltec_ros2/install/setup.bash
 
-# 3. 运行示例
-python3 demo_app.py
+# 3. 选择合适的库文件使用
 ```
 
-### 最简单的示例
+### 示例 1：系统管理（最简单）
 
 ```python
-from robot_lib_system import RobotSystem
+from robot_lib_system import Robot
 
 # 创建机器人对象
-robot = RobotSystem()
+robot = Robot()
 
 # 初始化（麦轮车型）
 robot.initialize("mec")
@@ -72,27 +86,47 @@ print(f"电池电压: {voltage}V")
 robot.shutdown()
 ```
 
-### 5 分钟上手
+### 示例 2：运动控制
+
+```python
+from robot_lib_system_chassis import Robot
+
+robot = Robot()
+robot.initialize("mec")
+
+# 设置速度
+robot.set_velocity(0.3, 0.0, 0.0)  # 前进
+
+# 移动1米
+robot.move_distance(1.0, speed=0.3)
+
+# 旋转90度
+robot.rotate_angle(90, angular_speed=0.5)
+
+robot.shutdown()
+```
+
+### 示例 3：完整功能（推荐）
 
 ```python
 from robot_lib_full import Robot
-import time
 
-# 使用完整库（推荐）
-with Robot() as robot:
-    # 初始化
-    robot.initialize("mec")
-    
-    # 前进 1 米
-    robot.forward(1.0, speed=0.3)
-    
-    # 旋转 90 度
-    robot.turn(90)
-    
-    # 获取状态
-    robot.print_status()
-    
-# 自动关闭
+robot = Robot()
+robot.initialize("mec")
+
+# 启动建图
+robot.start_mapping("gmapping")
+
+# 键盘控制建图
+robot.start_keyboard_control()
+
+# 保存地图
+robot.save_map("my_map")
+
+# 导航到目标点
+robot.move_to_goal(2.0, 1.0, 0)
+
+robot.shutdown()
 ```
 
 ---
@@ -107,112 +141,56 @@ with Robot() as robot:
 | [🔧 ROS2封装实现原理.md](ROS2封装实现原理.md) | 详细的实现原理和技术细节 |
 | [🌟 ROS2功能Python封装.md](ROS2功能Python封装.md) | 原始需求文档 |
 
-### 模块文档
+### 库文件说明
 
-| 模块 | 文件 | 说明 |
-|------|------|------|
-| 系统管理 | `robot_lib_system.py` | 初始化、关闭、电压监控 |
-| 运动控制 | `robot_lib_motion.py` | 底盘运动、传感器数据 |
-| 机械臂 | `robot_lib_arm.py` | 关节控制、末端控制 |
-| 感知功能 | `robot_lib_sensors.py` | 雷达、相机、视觉应用 |
-| 建图导航 | `robot_lib_navigation.py` | SLAM、路径规划 |
-| 完整库 | `robot_lib_full.py` | 整合所有功能 |
+| 文件 | 大小 | 包含功能 |
+|------|------|----------|
+| `robot_lib_system.py` | 4.6KB | 系统管理 |
+| `robot_lib_system_chassis.py` | 15KB | 系统管理 + 底盘运动 |
+| `robot_lib_system_chassis_arm.py` | 22KB | + 机械臂控制 |
+| `robot_lib_system_chassis_arm_sensors.py` | 29KB | + 感知功能 |
+| `robot_lib_full.py` | 35KB | + 建图导航（完整版） |
 
 ---
 
-## 💡 使用示例
+## 💡 功能列表
 
-### 示例应用
+### 系统管理 (robot_lib_system.py)
+- ✅ `initialize(robot_type)` - 初始化机器人
+- ✅ `shutdown()` - 关闭系统
+- ✅ `get_battery_voltage()` - 获取电池电压
+- ✅ `emergency_stop()` - 紧急停止
+- ✅ `get_software_version()` - 获取版本
 
-项目提供了多个完整的示例应用：
+### 底盘运动 (robot_lib_system_chassis.py)
+- ✅ `set_velocity(vx, vy, wz)` - 设置速度
+- ✅ `move_distance(distance, speed)` - 移动指定距离
+- ✅ `rotate_angle(angle, speed)` - 旋转指定角度
+- ✅ `get_robot_pose()` - 获取位姿
+- ✅ `get_imu_data()` - 获取IMU数据
+- ✅ `get_wheel_speeds()` - 获取轮速
 
-```bash
-# 系统管理示例
-python3 system_app.py
+### 机械臂 (robot_lib_system_chassis_arm.py)
+- ✅ `set_joint_angles(j1, j2)` - 设置关节角度
+- ✅ `set_arm_position(x, y)` - 设置末端位置
+- ✅ `set_gripper(value)` - 控制夹爪
+- ✅ `get_arm_pose_xy()` - 获取末端位置
+- ✅ `arm_home()` - 机械臂复位
 
-# 运动控制示例
-python3 motion_app.py
+### 感知功能 (robot_lib_system_chassis_arm_sensors.py)
+- ✅ `launch_lidar()` / `stop_lidar()` - 雷达控制
+- ✅ `launch_camera()` / `stop_camera()` - 相机控制
+- ✅ `start_visual_follow(color)` - 视觉跟随
+- ✅ `start_line_tracking(color)` - 视觉巡线
+- ✅ `start_lidar_follow(distance)` - 雷达跟随
+- ✅ `get_lidar_distance(angle)` - 获取雷达距离
 
-# 机械臂控制示例
-python3 arm_app.py
-
-# 感知功能示例
-python3 sensors_app.py
-
-# 建图导航示例
-python3 navigation_app.py
-
-# 综合演示
-python3 demo_app.py
-```
-
-### 代码示例
-
-#### 1. 基本运动控制
-
-```python
-from robot_lib_motion import RobotMotion
-
-motion = RobotMotion("mec")
-
-# 前进
-motion.set_velocity(0.3, 0.0, 0.0)
-time.sleep(2)
-
-# 左移（仅麦轮）
-motion.set_velocity(0.0, 0.2, 0.0)
-time.sleep(2)
-
-# 停止
-motion.stop()
-```
-
-#### 2. 视觉跟随
-
-```python
-from robot_lib_sensors import RobotSensors
-
-sensors = RobotSensors()
-sensors.launch_camera()
-
-# 跟随红色物体
-sensors.start_visual_follow('red', control_robot=True)
-
-# 按 Ctrl+C 停止
-time.sleep(30)
-sensors.stop_application()
-```
-
-#### 3. SLAM 建图
-
-```python
-from robot_lib_navigation import RobotNavigation
-
-nav = RobotNavigation()
-
-# 启动建图
-nav.start_mapping("gmapping", visualize=True)
-
-# 键盘控制建图
-nav.start_keyboard_control()
-
-# 保存地图
-nav.save_map("my_map")
-```
-
-#### 4. 自主导航
-
-```python
-# 加载地图
-nav.load_map_and_start_navigation("my_map")
-
-# 导航到目标点
-nav.move_to_goal(x=2.0, y=1.5, theta=90)
-
-# 等待到达
-while nav.get_navigation_status() == "navigating":
-    time.sleep(1)
-```
+### 建图导航 (robot_lib_full.py)
+- ✅ `start_mapping(method)` - 启动SLAM建图
+- ✅ `save_map(name)` - 保存地图
+- ✅ `load_map_and_start_navigation(name)` - 加载地图并启动导航
+- ✅ `move_to_goal(x, y, theta)` - 导航到目标
+- ✅ `cancel_navigation()` - 取消导航
 
 ---
 
@@ -220,32 +198,23 @@ while nav.get_navigation_status() == "navigating":
 
 ```
 Python-encapsulation-of-ROS-functions/
-├── robot_lib_system.py          # 系统管理模块
-├── robot_lib_motion.py          # 运动控制模块
-├── robot_lib_arm.py             # 机械臂控制模块
-├── robot_lib_sensors.py         # 感知功能模块
-├── robot_lib_navigation.py      # 建图导航模块
-├── robot_lib_full.py            # 完整库（整合所有模块）
+├── robot_lib_system.py                      # 系统管理
+├── robot_lib_system_chassis.py              # 系统+底盘
+├── robot_lib_system_chassis_arm.py          # 系统+底盘+机械臂
+├── robot_lib_system_chassis_arm_sensors.py  # 系统+底盘+机械臂+感知
+├── robot_lib_full.py                        # 完整版（所有功能）
 │
-├── system_app.py                # 系统管理示例
-├── motion_app.py                # 运动控制示例
-├── arm_app.py                   # 机械臂示例
-├── sensors_app.py               # 感知功能示例
-├── navigation_app.py            # 建图导航示例
-├── demo_app.py                  # 综合演示
+├── ROS2功能Python封装.md                     # 需求文档
+├── ROS2封装实现原理.md                       # 实现原理（含ROS对比）
+├── 使用说明.md                               # 使用教程
+├── README.md                                # 本文件
 │
-├── ROS2功能Python封装.md        # 需求文档
-├── ROS2封装实现原理.md          # 实现原理文档
-├── 使用说明.md                  # 使用教程
-├── README.md                    # 本文件
+├── robot_lib.py                             # 原始参考文件（不修改）
+├── robot_app.py                             # 原始参考文件（不修改）
 │
-├── robot_lib.py                 # 原始参考文件
-├── robot_app.py                 # 原始参考文件
-│
-└── src/                         # ROS2 源代码（不修改）
+└── src/                                     # ROS2 源代码（不修改）
     ├── turn_on_wheeltec_robot/
     ├── wheeltec_robot_slam/
-    ├── wheeltec_robot_nav2/
     └── ...
 ```
 
@@ -256,8 +225,8 @@ Python-encapsulation-of-ROS-functions/
 ### 初学者
 
 1. 阅读 [使用说明.md](使用说明.md) 的"快速开始"部分
-2. 运行 `system_app.py` 了解基本操作
-3. 运行 `motion_app.py` 学习运动控制
+2. 使用 `robot_lib_system.py` 了解基本操作
+3. 使用 `robot_lib_system_chassis.py` 学习运动控制
 4. 尝试修改示例代码
 
 ### 进阶用户
