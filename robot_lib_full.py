@@ -204,7 +204,7 @@ class Robot:
         except:
             pass
 
-    def move_distance(self, distance, speed=0.3):
+    def move_distance(self, distance, speed):
         """
         移动指定距离（适用于差速和阿克曼）
         :param distance: float, 移动距离（米），正数前进，负数后退
@@ -244,7 +244,7 @@ class Robot:
         self.set_velocity(0, 0, 0)
         return True
 
-    def move_distance_xy(self, distance_x, distance_y, speed_x=0.3, speed_y=0.3):
+    def move_distance_xy(self, distance_x, distance_y, speed_x, speed_y):
         """
         麦轮车型：在X和Y方向移动指定距离
         :param distance_x: float, X方向移动距离（米）
@@ -289,7 +289,7 @@ class Robot:
         self.set_velocity(0, 0, 0)
         return True
 
-    def rotate_angle(self, angle_degrees, angular_speed=0.5):
+    def rotate_angle(self, angle_degrees, angular_speed):
         """
         原地旋转指定角度
         :param angle_degrees: float, 旋转角度（度），正数逆时针，负数顺时针
