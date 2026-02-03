@@ -228,11 +228,21 @@ class Robot:
         v_x = speed if distance > 0 else -speed
         
         # 持续运动直到达到目标距离
+        fail_count = 0
+        max_fails = 5
+        
         while True:
             current_pose = self._get_odom()
             if not current_pose:
+                fail_count += 1
+                if fail_count >= max_fails:
+                    print("[Error] move_distance: 多次无法读取位置，停止运动")
+                    self.set_velocity(0, 0, 0)
+                    return False
                 time.sleep(0.1)
                 continue
+            
+            fail_count = 0  # 重置失败计数
             
             dx = current_pose["x"] - start_x
             dy = current_pose["y"] - start_y
@@ -273,11 +283,21 @@ class Robot:
         vy = speed_y if distance_y >= 0 else -speed_y
         
         # 持续运动直到到达目标
+        fail_count = 0
+        max_fails = 5
+        
         while True:
             current_pose = self._get_odom()
             if not current_pose:
+                fail_count += 1
+                if fail_count >= max_fails:
+                    print("[Error] move_distance_xy: 多次无法读取位置，停止运动")
+                    self.set_velocity(0, 0, 0)
+                    return False
                 time.sleep(0.1)
                 continue
+            
+            fail_count = 0  # 重置失败计数
             
             error_x = target_x - current_pose["x"]
             error_y = target_y - current_pose["y"]
@@ -312,11 +332,21 @@ class Robot:
         v_x = 0.05 if self.robot_type == "akm" else 0.0  # 阿克曼需要微小线速度
         
         # 持续旋转直到达到目标角度
+        fail_count = 0
+        max_fails = 5
+        
         while True:
             current_pose = self._get_odom()
             if not current_pose:
+                fail_count += 1
+                if fail_count >= max_fails:
+                    print("[Error] rotate_angle: 多次无法读取位置，停止运动")
+                    self.set_velocity(0, 0, 0)
+                    return False
                 time.sleep(0.1)
                 continue
+            
+            fail_count = 0  # 重置失败计数
             
             current_theta = current_pose["theta"]
             error = self._angle_difference(target_theta, current_theta)
