@@ -440,27 +440,40 @@ class Robot:
         """获取里程计数据"""
         try:
             cmd = ["ros2", "topic", "echo", "/odom", "--once"]
-            output = subprocess.check_output(cmd, timeout=1.0, stderr=subprocess.DEVNULL).decode("utf-8")
+            output = subprocess.check_output(cmd, timeout=2.0, stderr=subprocess.PIPE).decode("utf-8")
             
             import re
-            pos_match = re.search(r"position:.*?x:\s*([-\d.]+).*?y:\s*([-\d.]+)", output, re.DOTALL)
-            quat_match = re.search(
-                r"orientation:.*?x:\s*([-\d.]+).*?y:\s*([-\d.]+).*?z:\s*([-\d.]+).*?w:\s*([-\d.]+)",
-                output, re.DOTALL
-            )
+            # 改进的正则表达式，支持科学计数法（如 1.0e-09）
+            number_pattern = r"([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)"
+            
+            # 匹配位置信息
+            pos_pattern = f"position:.*?x:\\s*{number_pattern}.*?y:\\s*{number_pattern}"
+            pos_match = re.search(pos_pattern, output, re.DOTALL)
+            
+            # 匹配方向（四元数）
+            quat_pattern = f"orientation:.*?x:\\s*{number_pattern}.*?y:\\s*{number_pattern}.*?z:\\s*{number_pattern}.*?w:\\s*{number_pattern}"
+            quat_match = re.search(quat_pattern, output, re.DOTALL)
             
             if pos_match and quat_match:
                 x = float(pos_match.group(1))
                 y = float(pos_match.group(2))
+                qx = float(quat_match.group(1))
+                qy = float(quat_match.group(2))
                 qz = float(quat_match.group(3))
                 qw = float(quat_match.group(4))
                 
-                # 四元数转欧拉角（yaw）
-                theta = math.atan2(2.0 * (qw * qz), 1.0 - 2.0 * (qz * qz))
+                # 四元数转欧拉角（yaw）- 使用完整公式
+                theta = math.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy * qy + qz * qz))
                 
                 return {"x": x, "y": y, "theta": theta}
-        except:
-            pass
+        except subprocess.TimeoutExpired:
+            print("[Error] _get_odom: 读取 /odom 话题超时")
+        except subprocess.CalledProcessError:
+            print("[Error] _get_odom: 无法读取 /odom 话题，请确保 ROS 底盘驱动已启动")
+        except ValueError as e:
+            print(f"[Error] _get_odom: 数据解析失败 - {e}")
+        except Exception as e:
+            print(f"[Error] _get_odom: {type(e).__name__}: {e}")
         
         return None
 
