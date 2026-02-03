@@ -29,6 +29,9 @@ class Robot:
             print(f"[Error] 未知的车型: {robot_type}. 支持: {list(self.ROBOT_TYPE_MAP.keys())}")
             return False
 
+        # 保存车型信息，供后续函数使用
+        self.robot_type = robot_type
+
         # 获取实际的 ROS 参数值
         real_type_name = self.ROBOT_TYPE_MAP[robot_type]
         print(f"[System] 正在启动 {real_type_name} ({robot_type}) 底盘驱动...")
