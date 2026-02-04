@@ -795,6 +795,7 @@ class Robot:
     def start_visual_follow(self):
         """
         启动视觉跟随
+        改进：更准确的启动验证，检查节点和话题状态
         注意：颜色需要在启动后通过图形界面手动选择
         :return: bool, 是否成功
         """
@@ -803,10 +804,13 @@ class Robot:
             return False
         
         if not self.camera_process:
+            print("[Info] 启动相机...")
             self.launch_camera()
+            time.sleep(2)
         
         print("[App] 启动视觉跟随...")
         print("[Info] 程序启动后，请在弹出的窗口中选择目标颜色")
+        
         cmd = [
             "ros2", "launch",
             "simple_follower_ros2", "visual_follower.launch.py"
@@ -817,25 +821,53 @@ class Robot:
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                preexec_fn=os.setsid  # 创建新的进程组
+                preexec_fn=os.setsid
             )
-            time.sleep(3)  # 等待启动
+            
+            print("[Info] 正在启动，请稍候（约5-10秒）...")
+            time.sleep(5)
             
             if self.application_process.poll() is not None:
-                print("[Error] 视觉跟随启动失败")
+                print("[Error] 视觉跟随进程启动失败（进程已退出）")
                 self.application_process = None
                 return False
             
+            # 检查节点
+            print("[Info] 检查节点状态...")
+            node_ready = False
+            for i in range(5):
+                if self._check_ros_node_exists("visual_follow"):
+                    node_ready = True
+                    break
+                time.sleep(1)
+            
+            if not node_ready:
+                print("[Warning] visual_follow节点未检测到，但进程正在运行")
+                print("[Info] 功能可能正在初始化，请观察窗口是否出现")
+            else:
+                print("[Success] visual_follow节点已就绪")
+            
+            # 检查图像话题
+            print("[Info] 检查图像话题...")
+            if self._check_topic_publishing("/image_raw", timeout=3.0):
+                print("[Success] 图像数据正常")
+            else:
+                print("[Warning] 图像话题暂无数据")
+            
             print("[App] 视觉跟随已启动")
             return True
+            
         except Exception as e:
             print(f"[Error] 启动失败: {e}")
-            self.application_process = None
+            if self.application_process:
+                self._terminate_process_gracefully(self.application_process, "视觉跟随")
+                self.application_process = None
             return False
 
     def start_line_tracking(self):
         """
         启动视觉巡线
+        改进：更准确的启动验证，检查节点和话题状态
         注意：线条颜色需要在启动后通过trackbar手动选择
         :return: bool, 是否成功
         """
@@ -844,11 +876,14 @@ class Robot:
             return False
         
         if not self.camera_process:
+            print("[Info] 启动相机...")
             self.launch_camera()
+            time.sleep(2)  # 等待相机就绪
         
         print("[App] 启动视觉巡线...")
         print("[Info] 程序启动后，请在'Adjust_hsv'窗口中选择线条颜色")
         print("[Info] 0:Red, 1:Green, 2:Blue, 3:Yellow, 4:Black")
+        
         cmd = [
             "ros2", "launch",
             "simple_follower_ros2", "line_follower.launch.py"
@@ -861,23 +896,53 @@ class Robot:
                 stderr=subprocess.DEVNULL,
                 preexec_fn=os.setsid  # 创建新的进程组
             )
-            time.sleep(3)  # 等待启动
             
+            # 等待启动（增加等待时间，复杂功能需要更长时间）
+            print("[Info] 正在启动，请稍候（约5-10秒）...")
+            time.sleep(5)
+            
+            # 检查进程是否崩溃
             if self.application_process.poll() is not None:
-                print("[Error] 视觉巡线启动失败")
+                print("[Error] 视觉巡线进程启动失败（进程已退出）")
                 self.application_process = None
                 return False
             
+            # 检查ROS节点是否存在
+            print("[Info] 检查节点状态...")
+            node_ready = False
+            for i in range(5):  # 最多等待5秒
+                if self._check_ros_node_exists("line_follow"):
+                    node_ready = True
+                    break
+                time.sleep(1)
+            
+            if not node_ready:
+                print("[Warning] line_follow节点未检测到，但进程正在运行")
+                print("[Info] 功能可能正在初始化，请观察窗口是否出现")
+            else:
+                print("[Success] line_follow节点已就绪")
+            
+            # 检查图像话题
+            print("[Info] 检查图像话题...")
+            if self._check_topic_publishing("/image_raw", timeout=3.0):
+                print("[Success] 图像数据正常")
+            else:
+                print("[Warning] 图像话题暂无数据，相机可能正在初始化")
+            
             print("[App] 视觉巡线已启动")
             return True
+            
         except Exception as e:
             print(f"[Error] 启动失败: {e}")
-            self.application_process = None
+            if self.application_process:
+                self._terminate_process_gracefully(self.application_process, "视觉巡线")
+                self.application_process = None
             return False
 
     def start_lidar_follow(self):
         """
         启动雷达跟随
+        改进：更准确的启动验证，检查节点和话题状态
         :return: bool, 是否成功
         """
         if self.application_process:
@@ -885,9 +950,12 @@ class Robot:
             return False
         
         if not self.lidar_process:
+            print("[Info] 启动雷达...")
             self.launch_lidar()
+            time.sleep(2)
         
         print("[App] 启动雷达跟随...")
+        
         cmd = [
             "ros2", "launch",
             "simple_follower_ros2", "laser_follower.launch.py"
@@ -898,88 +966,160 @@ class Robot:
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                preexec_fn=os.setsid  # 创建新的进程组
+                preexec_fn=os.setsid
             )
-            time.sleep(3)  # 等待启动
+            
+            print("[Info] 正在启动，请稍候（约5-10秒）...")
+            time.sleep(5)
             
             if self.application_process.poll() is not None:
-                print("[Error] 雷达跟随启动失败")
+                print("[Error] 雷达跟随进程启动失败（进程已退出）")
                 self.application_process = None
                 return False
             
+            # 检查节点
+            print("[Info] 检查节点状态...")
+            node_ready = False
+            for i in range(5):
+                if self._check_ros_node_exists("laser_follow"):
+                    node_ready = True
+                    break
+                time.sleep(1)
+            
+            if not node_ready:
+                print("[Warning] laser_follow节点未检测到，但进程正在运行")
+                print("[Info] 功能可能正在初始化")
+            else:
+                print("[Success] laser_follow节点已就绪")
+            
+            # 检查雷达话题
+            print("[Info] 检查雷达话题...")
+            if self._check_topic_publishing("/scan", timeout=3.0):
+                print("[Success] 雷达数据正常")
+            else:
+                print("[Warning] 雷达话题暂无数据")
+            
             print("[App] 雷达跟随已启动")
             return True
+            
         except Exception as e:
             print(f"[Error] 启动失败: {e}")
-            self.application_process = None
+            if self.application_process:
+                self._terminate_process_gracefully(self.application_process, "雷达跟随")
+                self.application_process = None
             return False
+
+    def _check_ros_node_exists(self, node_name_pattern):
+        """
+        检查ROS节点是否存在
+        :param node_name_pattern: str, 节点名称或模式
+        :return: bool
+        """
+        try:
+            cmd = ["ros2", "node", "list"]
+            output = subprocess.check_output(cmd, timeout=3.0, stderr=subprocess.DEVNULL).decode("utf-8")
+            return node_name_pattern in output
+        except:
+            return False
+
+    def _check_topic_publishing(self, topic_name, timeout=2.0):
+        """
+        检查话题是否有数据发布
+        :param topic_name: str, 话题名称
+        :param timeout: float, 超时时间
+        :return: bool
+        """
+        try:
+            cmd = ["ros2", "topic", "echo", topic_name, "--once"]
+            subprocess.check_output(cmd, timeout=timeout, stderr=subprocess.DEVNULL)
+            return True
+        except:
+            return False
+
+    def _terminate_process_gracefully(self, process, process_name="进程"):
+        """
+        优雅地终止进程（多级终止）
+        :param process: subprocess.Popen对象
+        :param process_name: str, 进程名称（用于日志）
+        """
+        if not process:
+            return
+        
+        try:
+            # 获取进程组ID
+            pgid = os.getpgid(process.pid)
+            
+            # 第一步：SIGINT（优雅退出）
+            try:
+                os.killpg(pgid, signal.SIGINT)
+                process.wait(timeout=2)
+                return  # 成功退出
+            except subprocess.TimeoutExpired:
+                pass
+            except:
+                pass
+            
+            # 第二步：SIGTERM（强制终止）
+            if process.poll() is None:
+                try:
+                    os.killpg(pgid, signal.SIGTERM)
+                    process.wait(timeout=1.5)
+                    return  # 成功终止
+                except subprocess.TimeoutExpired:
+                    pass
+                except:
+                    pass
+            
+            # 第三步：SIGKILL（立即终止）
+            if process.poll() is None:
+                try:
+                    os.killpg(pgid, signal.SIGKILL)
+                    process.wait(timeout=0.5)
+                except:
+                    pass
+                    
+        except Exception as e:
+            print(f"[Warning] 终止{process_name}时出现异常: {e}")
+            try:
+                process.terminate()
+                process.wait(timeout=1)
+            except:
+                pass
 
     def stop_application(self):
         """
         停止当前应用
-        使用进程树终止，确保完全停止
+        改进：也会停止相机，确保设备完全释放
         """
-        if not self.application_process:
+        if not self.application_process and not self.camera_process:
             print("[Info] 没有正在运行的应用")
             return
         
         print("[App] 正在停止应用...")
         
-        try:
-            # 先发送停止速度命令
-            self.set_velocity(0, 0, 0)
-            time.sleep(0.2)
-            
-            # 获取进程组ID
-            pgid = os.getpgid(self.application_process.pid)
-            
-            # 第一步：发送SIGINT（优雅退出）
-            try:
-                os.killpg(pgid, signal.SIGINT)
-                print("[App] 发送停止信号（SIGINT）...")
-                time.sleep(2)
-            except:
-                pass
-            
-            # 检查是否停止
-            if self.application_process.poll() is None:
-                # 第二步：发送SIGTERM
-                try:
-                    os.killpg(pgid, signal.SIGTERM)
-                    print("[App] 发送终止信号（SIGTERM）...")
-                    time.sleep(1.5)
-                except:
-                    pass
-            
-            # 检查是否停止
-            if self.application_process.poll() is None:
-                # 第三步：发送SIGKILL（强制终止）
-                try:
-                    os.killpg(pgid, signal.SIGKILL)
-                    print("[App] 强制终止（SIGKILL）...")
-                    time.sleep(0.5)
-                except:
-                    pass
-            
-            # 等待进程完全结束
-            try:
-                self.application_process.wait(timeout=1)
-            except:
-                pass
-            
-        except Exception as e:
-            print(f"[Warning] 停止过程中出现异常: {e}")
-            # 尝试直接终止
-            try:
-                self.application_process.kill()
-            except:
-                pass
+        # 1. 先发送停止速度命令
+        self.set_velocity(0, 0, 0)
+        time.sleep(0.2)
         
-        finally:
+        # 2. 终止application进程
+        if self.application_process:
+            print("[App] 正在停止应用进程...")
+            self._terminate_process_gracefully(self.application_process, "应用")
             self.application_process = None
-            # 再次确保机器人停止
-            self.set_velocity(0, 0, 0)
-            print("[App] 应用已停止")
+        
+        # 3. 终止camera进程（关键修复：释放相机设备）
+        if self.camera_process:
+            print("[App] 正在停止相机...")
+            self._terminate_process_gracefully(self.camera_process, "相机")
+            self.camera_process = None
+        
+        # 4. 等待设备释放
+        time.sleep(1)
+        
+        # 5. 再次确保机器人停止
+        self.set_velocity(0, 0, 0)
+        
+        print("[App] 应用和相机已完全停止，设备已释放")
 
     def get_lidar_distance(self, angle_degrees=0):
         """

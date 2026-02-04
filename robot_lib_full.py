@@ -795,6 +795,7 @@ class Robot:
     def start_visual_follow(self):
         """
         启动视觉跟随
+        改进：更准确的启动验证，检查节点和话题状态
         注意：颜色需要在启动后通过图形界面手动选择
         :return: bool, 是否成功
         """
@@ -803,10 +804,13 @@ class Robot:
             return False
         
         if not self.camera_process:
+            print("[Info] 启动相机...")
             self.launch_camera()
+            time.sleep(2)
         
         print("[App] 启动视觉跟随...")
         print("[Info] 程序启动后，请在弹出的窗口中选择目标颜色")
+        
         cmd = [
             "ros2", "launch",
             "simple_follower_ros2", "visual_follower.launch.py"
@@ -817,25 +821,53 @@ class Robot:
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                preexec_fn=os.setsid  # 创建新的进程组
+                preexec_fn=os.setsid
             )
-            time.sleep(3)  # 等待启动
+            
+            print("[Info] 正在启动，请稍候（约5-10秒）...")
+            time.sleep(5)
             
             if self.application_process.poll() is not None:
-                print("[Error] 视觉跟随启动失败")
+                print("[Error] 视觉跟随进程启动失败（进程已退出）")
                 self.application_process = None
                 return False
             
+            # 检查节点
+            print("[Info] 检查节点状态...")
+            node_ready = False
+            for i in range(5):
+                if self._check_ros_node_exists("visual_follow"):
+                    node_ready = True
+                    break
+                time.sleep(1)
+            
+            if not node_ready:
+                print("[Warning] visual_follow节点未检测到，但进程正在运行")
+                print("[Info] 功能可能正在初始化，请观察窗口是否出现")
+            else:
+                print("[Success] visual_follow节点已就绪")
+            
+            # 检查图像话题
+            print("[Info] 检查图像话题...")
+            if self._check_topic_publishing("/image_raw", timeout=3.0):
+                print("[Success] 图像数据正常")
+            else:
+                print("[Warning] 图像话题暂无数据")
+            
             print("[App] 视觉跟随已启动")
             return True
+            
         except Exception as e:
             print(f"[Error] 启动失败: {e}")
-            self.application_process = None
+            if self.application_process:
+                self._terminate_process_gracefully(self.application_process, "视觉跟随")
+                self.application_process = None
             return False
 
     def start_line_tracking(self):
         """
         启动视觉巡线
+        改进：更准确的启动验证，检查节点和话题状态
         注意：线条颜色需要在启动后通过trackbar手动选择
         :return: bool, 是否成功
         """
@@ -844,11 +876,14 @@ class Robot:
             return False
         
         if not self.camera_process:
+            print("[Info] 启动相机...")
             self.launch_camera()
+            time.sleep(2)  # 等待相机就绪
         
         print("[App] 启动视觉巡线...")
         print("[Info] 程序启动后，请在'Adjust_hsv'窗口中选择线条颜色")
         print("[Info] 0:Red, 1:Green, 2:Blue, 3:Yellow, 4:Black")
+        
         cmd = [
             "ros2", "launch",
             "simple_follower_ros2", "line_follower.launch.py"
@@ -859,41 +894,6 @@ class Robot:
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
-                preexec_fn=os.setsid  # 创建新的进程组
-            )
-            time.sleep(3)  # 等待启动
-            
-            if self.application_process.poll() is not None:
-                print("[Error] 视觉巡线启动失败")
-                self.application_process = None
-                return False
-            
-            print("[App] 视觉巡线已启动")
-            return True
-        except Exception as e:
-            print(f"[Error] 启动失败: {e}")
-            self.application_process = None
-            return False
-
-    def start_lidar_follow(self):
-        """
-        启动雷达跟随
-        :return: bool, 是否成功
-        """
-        if self.application_process:
-            print("[Warning] 已有应用在运行，请先停止")
-            return False
-        
-        if not self.lidar_process:
-            self.launch_lidar()
-        
-        print("[App] 启动雷达跟随...")
-        cmd = [
-            "ros2", "launch",
-            "simple_follower_ros2", "laser_follower.launch.py"
-        ]
-        
-        try:
             self.application_process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.DEVNULL,
